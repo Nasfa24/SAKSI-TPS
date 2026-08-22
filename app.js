@@ -22,13 +22,11 @@ const partaiList = [
     { id: 10, nama: "Hanura" }
 ];
 
-// Inisialisasi Aplikasi
 document.addEventListener("DOMContentLoaded", () => {
     initDB();
     renderPartaiInputs();
     checkNetworkStatus();
 
-    // Event Listeners
     window.addEventListener('online', updateNetworkStatus);
     window.addEventListener('offline', updateNetworkStatus);
     
@@ -37,7 +35,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('btn-refresh').addEventListener('click', handleClearCache);
 });
 
-// Render Input Form Secara Dinamis
 function renderPartaiInputs() {
     const container = document.getElementById('partai-container');
     let html = '';
@@ -61,15 +58,22 @@ function renderPartaiInputs() {
     container.innerHTML = html;
 }
 
-// Menampilkan Nama File C1 yang dipilih
+// Update untuk penanganan multiple file display
 function handleFileSelect(e) {
-    const file = e.target.files[0];
-    if (file) {
-        document.getElementById('file-name').textContent = "✅ Dokumen siap: " + file.name;
+    const files = e.target.files;
+    const fileNameDisplay = document.getElementById('file-name');
+    if (files.length > 0) {
+        fileNameDisplay.textContent = `✅ ${files.length} dokumen telah dipilih.`;
+        if (files.length < 5) {
+            fileNameDisplay.style.color = "#FF9c08"; // Peringatan visual jika kurang dari 5
+        } else {
+            fileNameDisplay.style.color = "#03754c";
+        }
+    } else {
+        fileNameDisplay.textContent = "Belum ada foto yang dipilih.";
     }
 }
 
-// Inisialisasi IndexedDB untuk Mode Offline
 function initDB() {
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = (e) => {
@@ -82,7 +86,6 @@ function initDB() {
     request.onerror = (e) => console.error("Database error:", e.target.error);
 }
 
-// Deteksi Status Sinyal
 function updateNetworkStatus() {
     const badge = document.getElementById('network-status');
     const warning = document.getElementById('antrean-info');
@@ -90,7 +93,7 @@ function updateNetworkStatus() {
         badge.textContent = "Online";
         badge.className = "status-badge online";
         warning.classList.add('hidden');
-        syncOfflineData(); // Coba sinkronisasi jika tiba-tiba online
+        syncOfflineData(); 
     } else {
         badge.textContent = "Offline Mode";
         badge.className = "status-badge offline";
@@ -99,7 +102,6 @@ function updateNetworkStatus() {
 }
 function checkNetworkStatus() { updateNetworkStatus(); }
 
-// Konversi File Fisik menjadi Base64 untuk dikirim via JSON
 function getBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -109,7 +111,6 @@ function getBase64(file) {
     });
 }
 
-// Main Submit Handler (Mencegah Klik Ganda)
 async function handleFormSubmit(e) {
     e.preventDefault();
     
@@ -119,25 +120,50 @@ async function handleFormSubmit(e) {
 
     try {
         const fileInput = document.getElementById('file_c1');
-        const file = fileInput.files[0];
+        const rawFiles = fileInput.files;
         
-        if (!file) throw new Error("Foto C1 wajib diunggah!");
-
-        const base64Data = await getBase64(file);
-        const fileExtension = file.name.split('.').pop();
+        // 1. Validasi Minimum 5 Foto
+        if (rawFiles.length < 5) {
+            throw new Error(`Anda baru melampirkan ${rawFiles.length} foto. Minimal 5 foto C1 wajib dilampirkan agar data valid untuk verifikasi.`);
+        }
         
-        // Mengumpulkan Data Suara
+        // 2. Kumpulkan & Validasi Data Suara
         let data_suara = [];
+        let missingMandatory = [];
+        const requiredPartaiIds = [1, 2, 3, 4]; // PKB, Gerindra, PDIP, Golkar
+
         partaiList.forEach(partai => {
-            const suaraPartai = document.querySelector(`input[name="suara_partai_${partai.id}"]`).value || 0;
-            const suaraCaleg = document.querySelector(`input[name="suara_caleg_${partai.id}"]`).value || 0;
+            const suaraPartai = document.querySelector(`input[name="suara_partai_${partai.id}"]`).value;
+            const suaraCaleg = document.querySelector(`input[name="suara_caleg_${partai.id}"]`).value;
+            
+            // Peringatan jika partai wajib kosong sama sekali
+            if (requiredPartaiIds.includes(partai.id) && (suaraPartai === "" && suaraCaleg === "")) {
+                missingMandatory.push(partai.nama);
+            }
+
             data_suara.push({
                 id_partai: partai.id,
                 nama_partai: partai.nama,
-                suara_partai: parseInt(suaraPartai),
-                total_suara_caleg: parseInt(suaraCaleg)
+                suara_partai: suaraPartai === "" ? 0 : parseInt(suaraPartai),
+                total_suara_caleg: suaraCaleg === "" ? 0 : parseInt(suaraCaleg)
             });
         });
+
+        // Hentikan proses jika partai wajib tidak diisi
+        if (missingMandatory.length > 0) {
+            throw new Error(`Anda belum mengisi hasil suara untuk partai wajib: ${missingMandatory.join(', ')}.`);
+        }
+
+        // 3. Konversi array file fisik menjadi array Base64
+        let processedFiles = [];
+        for (let i = 0; i < rawFiles.length; i++) {
+            const base64Data = await getBase64(rawFiles[i]);
+            processedFiles.push({
+                base64: base64Data,
+                mime: rawFiles[i].type,
+                ext: rawFiles[i].name.split('.').pop()
+            });
+        }
 
         const payload = {
             action: "SUBMIT_C1",
@@ -148,9 +174,7 @@ async function handleFormSubmit(e) {
                 tps: document.getElementById('tps').value,
                 alamat: document.getElementById('alamat').value,
                 data_suara: data_suara,
-                file_c1_base64: base64Data,
-                file_mime_type: file.type,
-                file_extension: fileExtension
+                files: processedFiles // Mengirim array files
             }
         };
 
@@ -160,19 +184,18 @@ async function handleFormSubmit(e) {
             await saveToOfflineQueue(payload);
         }
 
-        // Reset Form setelah sukses
+        // Reset
         document.getElementById('form-c1').reset();
         document.getElementById('file-name').textContent = "Belum ada foto yang dipilih.";
 
     } catch (error) {
-        Swal.fire({ icon: 'error', title: 'Oops...', text: error.message, confirmButtonColor: '#03754c' });
+        Swal.fire({ icon: 'error', title: 'Validasi Gagal', text: error.message, confirmButtonColor: '#03754c' });
     } finally {
         btnSubmit.disabled = false;
         btnSubmit.textContent = "Kirim Data TPS";
     }
 }
 
-// Fungsi Kirim ke Google Apps Script (Backend)
 async function sendDataToServer(payload) {
     Swal.fire({
         title: 'Mengirim Data...',
@@ -202,11 +225,10 @@ async function sendDataToServer(payload) {
             throw new Error(result.message);
         }
     } catch (error) {
-        throw new Error("Gagal terhubung ke server. Pastikan URL API benar. Detail: " + error.message);
+        throw new Error("Gagal terhubung ke server. Pastikan URL API benar atau NIK Anda sudah terdaftar. Detail: " + error.message);
     }
 }
 
-// Fungsi Simpan ke IndexedDB jika Offline
 function saveToOfflineQueue(payload) {
     return new Promise((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, "readwrite");
@@ -226,7 +248,6 @@ function saveToOfflineQueue(payload) {
     });
 }
 
-// Background Sync Task
 async function syncOfflineData() {
     if (!navigator.onLine || !db) return;
 
@@ -241,19 +262,17 @@ async function syncOfflineData() {
             for (let item of antrean) {
                 try {
                     await sendDataToServer(item.payload);
-                    // Hapus dari IndexedDB jika berhasil
                     const deleteTx = db.transaction(STORE_NAME, "readwrite");
                     deleteTx.objectStore(STORE_NAME).delete(item.id);
                 } catch (err) {
                     console.error("Gagal sinkronisasi data ID " + item.id, err);
-                    break; // Berhenti jika masih gagal (mungkin koneksi putus lagi)
+                    break;
                 }
             }
         }
     };
 }
 
-// Fitur Anti-Bug: Refresh & Clear Cache menyeluruh
 function handleClearCache() {
     Swal.fire({
         title: 'Refresh & Bersihkan Cache?',
