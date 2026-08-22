@@ -1,241 +1,280 @@
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxSbe79gXWIYFXysaFWmdt8WNbcPYBvq0Ulf0clh6-XzKSKm60cncZp9q3mgse9Er8k/exec"; 
+/**
+ * KONFIGURASI API
+ * Ganti URL di bawah dengan Web App URL dari Google Apps Script yang sudah Anda Deploy!
+ */
+const API_URL = "URL_WEB_APP_GOOGLE_SCRIPT_ANDA_DISINI"; 
 
-let userSession = JSON.parse(localStorage.getItem('user_session')) || null;
-let fotoBase64Global = "";
+const DB_NAME = "RealCountDB";
+const STORE_NAME = "antrean_c1";
+let db;
 
-// PWA: Daftarkan Service Worker
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-}
+// Daftar Partai Wajib & Tambahan
+const partaiList = [
+    { id: 1, nama: "PKB (Partai Kebangkitan Bangsa)" },
+    { id: 2, nama: "Gerindra (Partai Gerakan Indonesia Raya)" },
+    { id: 3, nama: "PDIP (Partai Demokrasi Indonesia Perjuangan)" },
+    { id: 4, nama: "Golkar (Golongan Karya)" },
+    { id: 5, nama: "NasDem" },
+    { id: 6, nama: "Partai Buruh" },
+    { id: 7, nama: "Gelora" },
+    { id: 8, nama: "PKS (Partai Keadilan Sejahtera)" },
+    { id: 9, nama: "PKN (Partai Kebangkitan Nusantara)" },
+    { id: 10, nama: "Hanura" }
+];
 
-// Router sederhana
-window.onload = () => {
-    if (userSession) {
-        showApp();
-    } else {
-        document.getElementById('login-page').classList.remove('hidden');
-    }
-    checkOnlineStatus();
-    window.addEventListener('online', checkOnlineStatus);
-    window.addEventListener('offline', checkOnlineStatus);
-};
+// Inisialisasi Aplikasi
+document.addEventListener("DOMContentLoaded", () => {
+    initDB();
+    renderPartaiInputs();
+    checkNetworkStatus();
 
-function checkOnlineStatus() {
-    const offlineBar = document.getElementById('offline-bar');
-    if (navigator.onLine) {
-        offlineBar.classList.add('hidden');
-        processOfflineQueue(); // Otomatis sync jika online
-    } else {
-        offlineBar.classList.remove('hidden');
-    }
-    updateSyncBadge();
-}
-
-async function apiCall(action, payload) {
-    const response = await fetch(GAS_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" }, // Wajib text/plain untuk GAS
-        body: JSON.stringify({ action, payload })
-    });
-    return response.json();
-}
-
-// === AUTENTIKASI ===
-async function login() {
-    const pin = document.getElementById('pin').value;
-    const pass = document.getElementById('password').value;
-    const msg = document.getElementById('login-msg');
+    // Event Listeners
+    window.addEventListener('online', updateNetworkStatus);
+    window.addEventListener('offline', updateNetworkStatus);
     
-    if (!pin || !pass) return msg.innerText = "Isi PIN dan Password";
-    msg.innerText = "Mengecek kredensial...";
-    
-    if (!navigator.onLine) return msg.innerText = "Anda harus Online untuk login pertama kali.";
+    document.getElementById('file_c1').addEventListener('change', handleFileSelect);
+    document.getElementById('form-c1').addEventListener('submit', handleFormSubmit);
+    document.getElementById('btn-refresh').addEventListener('click', handleClearCache);
+});
 
-    try {
-        const res = await apiCall("LOGIN", { pin: pin, password: pass });
-        if (res.code === 200) {
-            userSession = res.data;
-            localStorage.setItem('user_session', JSON.stringify(userSession));
-            showApp();
-        } else {
-            msg.innerText = res.message;
-        }
-    } catch (e) {
-        msg.innerText = "Gagal terhubung ke server.";
-    }
-}
-
-// === MAIN APP ===
-async function showApp() {
-    document.getElementById('login-page').classList.add('hidden');
-    document.getElementById('app-page').classList.remove('hidden');
-    document.getElementById('user-tps').innerText = `TPS ${userSession.tps} - ${userSession.kelurahan}`;
-    
-    // Load Master Partai
-    let masterPartai = JSON.parse(localStorage.getItem('master_partai'));
-    
-    if (!masterPartai && navigator.onLine) {
-        const res = await apiCall("GET_MASTER", {});
-        masterPartai = res.data.partai;
-        localStorage.setItem('master_partai', JSON.stringify(masterPartai));
-    }
-    
-    renderPartai(masterPartai || []);
-}
-
-function renderPartai(partaiList) {
+// Render Input Form Secara Dinamis
+function renderPartaiInputs() {
     const container = document.getElementById('partai-container');
-    container.innerHTML = "";
-    partaiList.forEach(p => {
-        container.innerHTML += `
-            <div class="flex items-center justify-between border-b pb-2">
-                <div class="font-bold text-gray-700">${p.nomor}. ${p.nama}</div>
-                <input type="number" min="0" id="partai-${p.nomor}" class="suara-input w-24 text-right px-2 py-1 border rounded focus:border-red-500" placeholder="0">
+    let html = '';
+    partaiList.forEach(partai => {
+        html += `
+            <div class="partai-item">
+                <h3>${partai.id}. ${partai.nama}</h3>
+                <div class="suara-grid">
+                    <div class="input-group">
+                        <label>Suara Partai</label>
+                        <input type="number" name="suara_partai_${partai.id}" min="0" placeholder="0">
+                    </div>
+                    <div class="input-group">
+                        <label>Total Suara Caleg</label>
+                        <input type="number" name="suara_caleg_${partai.id}" min="0" placeholder="0">
+                    </div>
+                </div>
             </div>
         `;
     });
+    container.innerHTML = html;
 }
 
-// === KOMPRESI GAMBAR (BOIL THE OCEAN STANDARD) ===
-// Menghindari limitasi payload GAS dengan kompresi sisi klien
-function compressAndPreview(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+// Menampilkan Nama File C1 yang dipilih
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (file) {
+        document.getElementById('file-name').textContent = "✅ Dokumen siap: " + file.name;
+    }
+}
 
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (e) => {
-        const img = new Image();
-        img.src = e.target.result;
-        img.onload = () => {
-            const canvas = document.getElementById('canvas-compress');
-            const ctx = canvas.getContext('2d');
-            
-            // Limit resolusi maksimal 1280px (Cukup jelas untuk C1, sangat kecil di payload)
-            const MAX_WIDTH = 1280;
-            const scaleSize = MAX_WIDTH / img.width;
-            canvas.width = MAX_WIDTH;
-            canvas.height = img.height * scaleSize;
-            
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            // Kualitas kompresi JPG 0.7
-            fotoBase64Global = canvas.toDataURL("image/jpeg", 0.7); 
-            
-            // UI Update
-            const preview = document.getElementById('preview-foto');
-            preview.src = fotoBase64Global;
-            preview.classList.remove('hidden');
-            document.getElementById('label-foto').innerText = "Foto Terekam ✓";
+// Inisialisasi IndexedDB untuk Mode Offline
+function initDB() {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e) => {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
         }
     };
+    request.onsuccess = (e) => { db = e.target.result; syncOfflineData(); };
+    request.onerror = (e) => console.error("Database error:", e.target.error);
 }
 
-// === SUBMIT & OFFLINE QUEUE ===
-async function submitData() {
-    const alamat = document.getElementById('alamat-tps').value;
-    const btn = document.getElementById('btn-submit');
-    const msg = document.getElementById('submit-msg');
-    
-    if (!alamat || !fotoBase64Global) {
-        msg.innerText = "Alamat dan Foto C1 wajib diisi!";
-        msg.className = "text-center font-bold mt-2 text-red-600";
-        return;
+// Deteksi Status Sinyal
+function updateNetworkStatus() {
+    const badge = document.getElementById('network-status');
+    const warning = document.getElementById('antrean-info');
+    if (navigator.onLine) {
+        badge.textContent = "Online";
+        badge.className = "status-badge online";
+        warning.classList.add('hidden');
+        syncOfflineData(); // Coba sinkronisasi jika tiba-tiba online
+    } else {
+        badge.textContent = "Offline Mode";
+        badge.className = "status-badge offline";
+        warning.classList.remove('hidden');
     }
+}
+function checkNetworkStatus() { updateNetworkStatus(); }
 
-    // Ekstrak data suara dari input form
-    let dataSuara = {};
-    document.querySelectorAll('.suara-input').forEach(input => {
-        let idPartai = input.id.split('-')[1];
-        dataSuara[idPartai] = parseInt(input.value) || 0;
+// Konversi File Fisik menjadi Base64 untuk dikirim via JSON
+function getBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+}
+
+// Main Submit Handler (Mencegah Klik Ganda)
+async function handleFormSubmit(e) {
+    e.preventDefault();
+    
+    const btnSubmit = document.getElementById('btn-submit');
+    btnSubmit.disabled = true;
+    btnSubmit.textContent = "Memproses Data...";
+
+    try {
+        const fileInput = document.getElementById('file_c1');
+        const file = fileInput.files[0];
+        
+        if (!file) throw new Error("Foto C1 wajib diunggah!");
+
+        const base64Data = await getBase64(file);
+        const fileExtension = file.name.split('.').pop();
+        
+        // Mengumpulkan Data Suara
+        let data_suara = [];
+        partaiList.forEach(partai => {
+            const suaraPartai = document.querySelector(`input[name="suara_partai_${partai.id}"]`).value || 0;
+            const suaraCaleg = document.querySelector(`input[name="suara_caleg_${partai.id}"]`).value || 0;
+            data_suara.push({
+                id_partai: partai.id,
+                nama_partai: partai.nama,
+                suara_partai: parseInt(suaraPartai),
+                total_suara_caleg: parseInt(suaraCaleg)
+            });
+        });
+
+        const payload = {
+            action: "SUBMIT_C1",
+            payload: {
+                nik_saksi: document.getElementById('nik').value,
+                kecamatan: document.getElementById('kecamatan').value,
+                kelurahan: document.getElementById('kelurahan').value,
+                tps: document.getElementById('tps').value,
+                alamat: document.getElementById('alamat').value,
+                data_suara: data_suara,
+                file_c1_base64: base64Data,
+                file_mime_type: file.type,
+                file_extension: fileExtension
+            }
+        };
+
+        if (navigator.onLine) {
+            await sendDataToServer(payload);
+        } else {
+            await saveToOfflineQueue(payload);
+        }
+
+        // Reset Form setelah sukses
+        document.getElementById('form-c1').reset();
+        document.getElementById('file-name').textContent = "Belum ada foto yang dipilih.";
+
+    } catch (error) {
+        Swal.fire({ icon: 'error', title: 'Oops...', text: error.message, confirmButtonColor: '#03754c' });
+    } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = "Kirim Data TPS";
+    }
+}
+
+// Fungsi Kirim ke Google Apps Script (Backend)
+async function sendDataToServer(payload) {
+    Swal.fire({
+        title: 'Mengirim Data...',
+        text: 'Mohon tunggu, jangan tutup aplikasi.',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
     });
 
-    // Format Nama Sesuai Permintaan: [Kecamatan]_[Kelurahan]_[TPS]_[Alamat]
-    const namaFile = `${userSession.kecamatan}_${userSession.kelurahan}_${userSession.tps}_${alamat.replace(/[^a-zA-Z0-9 ]/g, "")}.jpg`;
+    try {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            mode: "cors", 
+            body: JSON.stringify(payload)
+        });
 
-    const payload = {
-        pin: userSession.pin,
-        kecamatan: userSession.kecamatan,
-        kelurahan: userSession.kelurahan,
-        tps: userSession.tps,
-        alamat: alamat,
-        data_suara: dataSuara,
-        foto_base64: fotoBase64Global,
-        mime_type: "image/jpeg",
-        nama_file: namaFile
-    };
+        const result = await response.json();
 
-    btn.disabled = true;
-    btn.innerText = "Memproses...";
+        if (result.status === "success") {
+            Swal.fire({
+                icon: 'success',
+                title: 'Mantap!',
+                text: 'Data TPS dan Foto C1 berhasil terkirim ke Server.',
+                confirmButtonColor: '#03754c'
+            });
+            return true;
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (error) {
+        throw new Error("Gagal terhubung ke server. Pastikan URL API benar. Detail: " + error.message);
+    }
+}
 
-    if (!navigator.onLine) {
-        // SIMPAN KE LOKAL (OFFLINE)
-        let queue = JSON.parse(localStorage.getItem('offline_queue')) || [];
-        queue.push(payload);
-        localStorage.setItem('offline_queue', JSON.stringify(queue));
+// Fungsi Simpan ke IndexedDB jika Offline
+function saveToOfflineQueue(payload) {
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        store.add({ payload: payload, timestamp: new Date().getTime() });
         
-        msg.innerText = "OFFLINE. Data diselamatkan dan akan dikirim saat online.";
-        msg.className = "text-center font-bold mt-2 text-yellow-600";
-        resetForm();
-        updateSyncBadge();
-    } else {
-        // KIRIM LANGSUNG
-        try {
-            const res = await apiCall("SUBMIT_C1", payload);
-            if (res.code === 200) {
-                msg.innerText = "BERHASIL! Data terkirim ke Server.";
-                msg.className = "text-center font-bold mt-2 text-green-600";
-                resetForm();
-            } else {
-                msg.innerText = "Gagal: " + res.message;
+        tx.oncomplete = () => {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Disimpan Lokal (Offline)',
+                text: 'Sinyal terputus. Data Anda aman tersimpan di HP dan akan otomatis terkirim saat sinyal kembali.',
+                confirmButtonColor: '#FF9c08'
+            });
+            resolve();
+        };
+        tx.onerror = () => reject(new Error("Gagal menyimpan ke penyimpanan offline."));
+    });
+}
+
+// Background Sync Task
+async function syncOfflineData() {
+    if (!navigator.onLine || !db) return;
+
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
+
+    request.onsuccess = async () => {
+        const antrean = request.result;
+        if (antrean.length > 0) {
+            console.log(`Menyinkronkan ${antrean.length} data tertunda...`);
+            for (let item of antrean) {
+                try {
+                    await sendDataToServer(item.payload);
+                    // Hapus dari IndexedDB jika berhasil
+                    const deleteTx = db.transaction(STORE_NAME, "readwrite");
+                    deleteTx.objectStore(STORE_NAME).delete(item.id);
+                } catch (err) {
+                    console.error("Gagal sinkronisasi data ID " + item.id, err);
+                    break; // Berhenti jika masih gagal (mungkin koneksi putus lagi)
+                }
             }
-        } catch (e) {
-            msg.innerText = "Error Jaringan. Harap coba lagi.";
         }
-    }
-    
-    btn.disabled = false;
-    btn.innerText = "Kirim Data & Foto";
+    };
 }
 
-function resetForm() {
-    document.getElementById('alamat-tps').value = "";
-    document.querySelectorAll('.suara-input').forEach(i => i.value = "");
-    document.getElementById('preview-foto').classList.add('hidden');
-    document.getElementById('label-foto').innerText = "Ambil Foto / Pilih Berkas";
-    fotoBase64Global = "";
-}
-
-// === BACKGROUND SYNC LOGIC ===
-async function processOfflineQueue() {
-    let queue = JSON.parse(localStorage.getItem('offline_queue')) || [];
-    if (queue.length === 0) return;
-
-    const badge = document.getElementById('sync-badge');
-    badge.classList.remove('hidden');
-    badge.innerText = `Menyinkronkan ${queue.length} Data...`;
-
-    let failedQueue = [];
-
-    for (let data of queue) {
-        try {
-            const res = await apiCall("SUBMIT_C1", data);
-            if (res.code !== 200) failedQueue.push(data); // Jika gagal server, antrikan lagi
-        } catch (e) {
-            failedQueue.push(data); // Jika gagal jaringan di tengah proses
+// Fitur Anti-Bug: Refresh & Clear Cache menyeluruh
+function handleClearCache() {
+    Swal.fire({
+        title: 'Refresh & Bersihkan Cache?',
+        text: "Gunakan fitur ini jika aplikasi terasa berat atau ada update sistem baru.",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#FF9c08',
+        cancelButtonColor: '#03754c',
+        confirmButtonText: 'Ya, Bersihkan!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    for(let registration of registrations) { registration.unregister(); }
+                });
+            }
+            caches.keys().then((keyList) => {
+                return Promise.all(keyList.map((key) => { return caches.delete(key); }));
+            }).then(() => {
+                window.location.reload(true);
+            });
         }
-    }
-
-    localStorage.setItem('offline_queue', JSON.stringify(failedQueue));
-    updateSyncBadge();
-}
-
-function updateSyncBadge() {
-    let queue = JSON.parse(localStorage.getItem('offline_queue')) || [];
-    const badge = document.getElementById('sync-badge');
-    if (queue.length > 0) {
-        document.getElementById('queue-count').innerText = queue.length;
-        badge.classList.remove('hidden');
-    } else {
-        badge.classList.add('hidden');
-    }
+    });
 }
