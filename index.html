@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Real Count C1 2029</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="manifest.json">
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800 font-sans">
+    
+    <!-- Status Koneksi Bar -->
+    <div id="offline-bar" class="hidden bg-red-600 text-white text-center py-2 text-sm font-bold sticky top-0 z-50">
+        Anda sedang OFFLINE. Data akan disimpan lokal dan dikirim otomatis saat internet kembali.
+    </div>
+
+    <!-- Halaman Login -->
+    <div id="login-page" class="flex items-center justify-center min-h-screen">
+        <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+            <h2 class="text-2xl font-bold text-center text-red-700 mb-6">Real Count 2029</h2>
+            <input type="text" id="pin" placeholder="PIN Saksi" class="w-full mb-4 px-4 py-2 border rounded focus:outline-none focus:border-red-500">
+            <input type="password" id="password" placeholder="Password" class="w-full mb-6 px-4 py-2 border rounded focus:outline-none focus:border-red-500">
+            <button onclick="login()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition">Masuk</button>
+            <div id="login-msg" class="text-center text-sm text-red-500 mt-3"></div>
+        </div>
+    </div>
+
+    <!-- Halaman Utama / Form Input -->
+    <div id="app-page" class="hidden pb-20">
+        <div class="bg-red-700 text-white p-4 shadow-md sticky top-0 z-40">
+            <div class="flex justify-between items-center max-w-2xl mx-auto">
+                <h1 class="font-bold text-lg">Input Formulir C1</h1>
+                <div class="text-sm">TPS: <span id="user-tps" class="font-bold"></span></div>
+            </div>
+        </div>
+
+        <div class="max-w-2xl mx-auto p-4 space-y-6">
+            <!-- Metadata TPS -->
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="font-bold text-gray-700 mb-3 border-b pb-2">Identitas TPS</h3>
+                <input type="text" id="alamat-tps" placeholder="Detail Alamat TPS (Contoh: Balai Desa X)" class="w-full px-3 py-2 border rounded">
+            </div>
+
+            <!-- List Partai Dinamis -->
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="font-bold text-gray-700 mb-3 border-b pb-2">Perolehan Suara Partai</h3>
+                <div id="partai-container" class="space-y-3">
+                    <div class="text-center text-gray-400 text-sm py-4">Memuat data partai...</div>
+                </div>
+            </div>
+
+            <!-- Upload Foto -->
+            <div class="bg-white p-4 rounded-lg shadow">
+                <h3 class="font-bold text-gray-700 mb-3 border-b pb-2">Foto Bukti C1 (Plano)</h3>
+                <label class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <p class="mb-2 text-sm text-gray-500 font-bold" id="label-foto">Ambil Foto / Pilih Berkas</p>
+                    </div>
+                    <input type="file" id="foto-c1" class="hidden" accept="image/*" capture="environment" onchange="compressAndPreview(event)" />
+                </label>
+                <!-- Canvas rahasia untuk kompresi -->
+                <canvas id="canvas-compress" class="hidden"></canvas>
+                <img id="preview-foto" class="hidden w-full mt-3 rounded shadow" />
+            </div>
+
+            <!-- Tombol Aksi -->
+            <button onclick="submitData()" id="btn-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition text-lg">
+                Kirim Data & Foto
+            </button>
+            <div id="submit-msg" class="text-center font-bold mt-2"></div>
+        </div>
+    </div>
+
+    <!-- Antrian Sinkronisasi Offline -->
+    <div id="sync-badge" class="hidden fixed bottom-4 right-4 bg-yellow-500 text-yellow-900 px-4 py-2 rounded-full font-bold shadow-lg animate-pulse">
+        Menunggu Sinyal: <span id="queue-count">0</span> Data
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
