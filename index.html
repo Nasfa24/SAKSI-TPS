@@ -59,8 +59,10 @@
         .form-group label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; }
         .form-control {
             width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px;
-            font-size: 1rem; transition: border 0.3s, box-shadow 0.3s;
+            font-size: 1rem; transition: border 0.3s, box-shadow 0.3s; background: var(--white);
         }
+        select.form-control { cursor: pointer; appearance: auto; }
+        select.form-control:disabled { background: #e9ecef; cursor: not-allowed; color: #888; border-color: #ddd; }
         .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(3, 117, 76, 0.2); }
         
         /* GRID PARTAI (Numpad Ergonomics) */
@@ -150,16 +152,25 @@
                 <label>No HP (WhatsApp)</label>
                 <input type="number" id="no_hp" class="form-control" inputmode="numeric">
             </div>
+            
+            <!-- UPDATE: CASCADING DROPDOWN KECAMATAN & KELURAHAN -->
             <div class="partai-grid">
                 <div class="form-group">
                     <label>Kecamatan</label>
-                    <input type="text" id="kecamatan" class="form-control" placeholder="Kecamatan">
+                    <select id="kecamatan" class="form-control" onchange="updateKelurahan()">
+                        <option value="">-- Pilih Kecamatan --</option>
+                        <!-- Di-generate via JavaScript -->
+                    </select>
                 </div>
                 <div class="form-group">
                     <label>Kelurahan</label>
-                    <input type="text" id="kelurahan" class="form-control" placeholder="Kelurahan">
+                    <select id="kelurahan" class="form-control" disabled>
+                        <option value="">-- Pilih Kelurahan --</option>
+                        <!-- Di-generate via JavaScript -->
+                    </select>
                 </div>
             </div>
+
             <div class="partai-grid">
                 <div class="form-group">
                     <label>Nomor TPS</label>
@@ -216,12 +227,48 @@
 <script>
     /**
      * ==============================================================================
-     * ENGINE KAWAL SUARA SURABAYA (FRONTEND)
+     * ENGINE KAWAL SUARA SURABAYA (FRONTEND - PRODUCTION READY)
      * ==============================================================================
      */
 
-    // GANTI URL INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
     const API_URL = "https://script.google.com/macros/s/AKfycbxSbe79gXWIYFXysaFWmdt8WNbcPYBvq0Ulf0clh6-XzKSKm60cncZp9q3mgse9Er8k/exec"; 
+
+    // ==========================================
+    // MASTER DATA KECAMATAN & KELURAHAN SURABAYA
+    // ==========================================
+    const DATA_WILAYAH = {
+        "Asemrowo": ["Asemrowo", "Genting Kalianak", "Tambak Sarioso"],
+        "Benowo": ["Kandangan", "Romokalisari", "Sememi", "Tambak Osowilangun"],
+        "Bubutan": ["Alun-Alun Contong", "Bubutan", "Gundih", "Jepara", "Tembok Dukuh"],
+        "Bulak": ["Bulak", "Kedung Cowek", "Kenjeran", "Sukolilo Baru"],
+        "Dukuh Pakis": ["Dukuh Kupang", "Dukuh Pakis", "Gunung Sari", "Pradah Kali Kendal"],
+        "Gayungan": ["Dukuh Menanggal", "Gayungan", "Ketintang", "Menanggal"],
+        "Genteng": ["Embong Kaliasin", "Genteng", "Kapasari", "Ketabang", "Peneleh"],
+        "Gubeng": ["Airlangga", "Barata Jaya", "Gubeng", "Kertajaya", "Mojo", "Pucang Sewu"],
+        "Gunung Anyar": ["Gunung Anyar", "Gunung Anyar Tambak", "Rungkut Menanggal", "Rungkut Tengah"],
+        "Jambangan": ["Jambangan", "Karah", "Kebonsari", "Pagesangan"],
+        "Karang Pilang": ["Karang Pilang", "Kebraon", "Kedurus", "Warugunung"],
+        "Kenjeran": ["Bulak Banteng", "Sidotopo Wetan", "Tambak Wedi", "Tanah Kali Kedinding"],
+        "Krembangan": ["Dupak", "Kemayoran", "Krembangan Selatan", "Morokrembangan", "Perak Barat"],
+        "Lakarsantri": ["Bangkingan", "Jeruk", "Lakarsantri", "Lidah Kulon", "Lidah Wetan", "Sumur Welut"],
+        "Mulyorejo": ["Dukuh Sutorejo", "Kalijudan", "Kalisari", "Kejawan Putih Tambak", "Manyar Sabrangan", "Mulyorejo"],
+        "Pabean Cantian": ["Bongkaran", "Krembangan Utara", "Nyamplungan", "Perak Timur", "Perak Utara"],
+        "Pakal": ["Babat Jerawat", "Benowo", "Pakal", "Sumberejo"],
+        "Rungkut": ["Kali Rungkut", "Kedung Baruk", "Medokan Ayu", "Penjaringan Sari", "Rungkut Kidul", "Wonorejo"],
+        "Sambikerep": ["Bringin", "Lontar", "Made", "Sambikerep"],
+        "Sawahan": ["Banyu Urip", "Kupang Krajan", "Pakis", "Patemon", "Putat Jaya", "Sawahan"],
+        "Semampir": ["Ampel", "Pegirian", "Sidotopo", "Ujung", "Wonokusumo"],
+        "Simokerto": ["Kapasan", "Sidodadi", "Simokerto", "Simolawang", "Tambakrejo"],
+        "Sukolilo": ["Gebang Putih", "Keputih", "Klampis Ngasem", "Medokan Semampir", "Menur Pumpungan", "Nginden Jangkungan", "Semolowaru"],
+        "Sukomanunggal": ["Putat Gede", "Simomulyo", "Simomulyo Baru", "Sono Kwijenan", "Sukomanunggal", "Tanjungsari"],
+        "Tambaksari": ["Dukuh Setro", "Gading", "Kapas Madya", "Pacar Keling", "Pacar Kembang", "Ploso", "Rangkah", "Tambaksari"],
+        "Tandes": ["Balongsari", "Banjar Sugihan", "Karang Poh", "Manukan Kulon", "Manukan Wetan", "Tandes"],
+        "Tegalsari": ["Dr. Sutomo", "Kedungdoro", "Keputran", "Tegalsari", "Wonorejo"],
+        "Tenggilis Mejoyo": ["Kendangsari", "Kutisari", "Panjang Jiwo", "Tenggilis Mejoyo"],
+        "Wiyung": ["Babatan", "Balas Klumprik", "Jajar Tunggal", "Wiyung"],
+        "Wonocolo": ["Bendul Merisi", "Jemur Wonosari", "Margorejo", "Sidosermo", "Siwalankerto"],
+        "Wonokromo": ["Darmo", "Jagir", "Ngagel", "Ngagelrejo", "Sawunggaling", "Wonokromo"]
+    };
 
     // Konfigurasi 18 Partai
     const DAFTAR_PARTAI = [
@@ -254,6 +301,7 @@
     // 1. INISIALISASI UI & SERVICE WORKER
     document.addEventListener("DOMContentLoaded", () => {
         renderPartaiGrid();
+        renderKecamatan(); // Eksekusi render Master Data Dropdown
         updateNetworkStatus();
         window.addEventListener('online', updateNetworkStatus);
         window.addEventListener('offline', updateNetworkStatus);
@@ -264,6 +312,46 @@
             navigator.serviceWorker.register('./sw.js').then(() => console.log("Service Worker Active."));
         }
     });
+
+    // ==========================================
+    // LOGIKA DROPDOWN CASCADING
+    // ==========================================
+    function renderKecamatan() {
+        const kecSelect = document.getElementById("kecamatan");
+        const kecamatanList = Object.keys(DATA_WILAYAH).sort(); // Sortir A-Z
+        
+        kecamatanList.forEach(kec => {
+            const option = document.createElement("option");
+            option.value = kec;
+            option.textContent = kec;
+            kecSelect.appendChild(option);
+        });
+    }
+
+    function updateKelurahan() {
+        const kecSelect = document.getElementById("kecamatan");
+        const kelSelect = document.getElementById("kelurahan");
+        const selectedKec = kecSelect.value;
+        
+        // Reset Kelurahan
+        kelSelect.innerHTML = '<option value="">-- Pilih Kelurahan --</option>';
+        
+        if (selectedKec && DATA_WILAYAH[selectedKec]) {
+            kelSelect.disabled = false;
+            const kelurahanList = DATA_WILAYAH[selectedKec].sort(); // Sortir A-Z
+            
+            kelurahanList.forEach(kel => {
+                const option = document.createElement("option");
+                option.value = kel;
+                option.textContent = kel;
+                kelSelect.appendChild(option);
+            });
+        } else {
+            // Jika user kembali memilih "-- Pilih Kecamatan --"
+            kelSelect.disabled = true;
+        }
+    }
+    // ==========================================
 
     function renderPartaiGrid() {
         const container = document.getElementById("container-partai");
@@ -438,7 +526,7 @@
         btn.innerHTML = "⏳ Memvalidasi...";
 
         try {
-            // A. Ambil Data Identitas
+            // A. Ambil Data Identitas (Update Dropdown)
             const payload = {
                 saksi: {
                     nik: document.getElementById("nik").value,
@@ -457,7 +545,8 @@
 
             // B. Validasi Dasar
             if (payload.saksi.nik.length !== 16) throw new Error("NIK wajib 16 digit.");
-            if (!payload.lokasi.kecamatan || !payload.lokasi.tps) throw new Error("Kecamatan dan TPS wajib diisi.");
+            if (!payload.lokasi.kecamatan || !payload.lokasi.kelurahan) throw new Error("Kecamatan dan Kelurahan wajib dipilih.");
+            if (!payload.lokasi.tps) throw new Error("Nomor TPS wajib diisi.");
 
             // C. Mapping Suara & Validasi Aturan 10 Partai
             let jumlahDiisi = 0;
@@ -505,14 +594,10 @@
     }
 
     async function sendToServer(payload) {
-        if(API_URL === "https://script.google.com/macros/s/AKfycbxSbe79gXWIYFXysaFWmdt8WNbcPYBvq0Ulf0clh6-XzKSKm60cncZp9q3mgse9Er8k/exec") {
-            throw new Error("Anda belum memasukkan API_URL dari Apps Script ke dalam kode HTML.");
-        }
-        
+        // PERBAIKAN: Validasi proteksi URL dicabut agar fetch bisa berjalan normal menggunakan URL asli Anda
         const response = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify(payload),
-            // Opsional: headers tidak perlu diset rumit untuk menghindari isu CORS ketat pada GAS
+            body: JSON.stringify(payload)
         });
         
         const result = await response.json();
@@ -538,7 +623,16 @@
     }
 
     function clearForm() {
+        // Kosongkan inputan teks
         document.querySelectorAll("input").forEach(input => input.value = "");
+        
+        // Reset Dropdown
+        document.getElementById("kecamatan").value = "";
+        const kelSelect = document.getElementById("kelurahan");
+        kelSelect.innerHTML = '<option value="">-- Pilih Kelurahan --</option>';
+        kelSelect.disabled = true;
+
+        // Kosongkan cache foto di UI
         capturedPhotos = {};
         document.querySelectorAll(".photo-slot").forEach(slot => slot.classList.remove("filled"));
     }
