@@ -1,45 +1,42 @@
-const CACHE_NAME = 'realcount-cache-v1';
-const urlsToCache = [
-  './',
-  './index.html',
-  './style.css',
-  './app.js',
-  'https://cdn.jsdelivr.net/npm/sweetalert2@11'
+const CACHE_NAME = 'kawal-suara-v1';
+const ASSETS_TO_CACHE = [
+    './',
+    './index.html'
 ];
 
+// Install Service Worker & Cache assets
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(urlsToCache);
-    })
-  );
-  self.skipWaiting(); // Memaksa update SW segera setelah dipasang
-});
-
-self.addEventListener('fetch', event => {
-  // Untuk API Call (POST request), tidak boleh di-cache, bypass langsung
-  if (event.request.method === 'POST') { return; }
-
-  // Strategi: Network First, fallback to Cache
-  event.respondWith(
-    fetch(event.request).catch(() => {
-      return caches.match(event.request);
-    })
-  );
-});
-
-self.addEventListener('activate', event => {
-  const cacheWhitelist = [CACHE_NAME];
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
+    self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME).then(cache => {
+            return cache.addAll(ASSETS_TO_CACHE);
         })
-      );
-    })
-  );
-  self.clients.claim();
+    );
+});
+
+// Activate & Cleanup old caches
+self.addEventListener('activate', event => {
+    event.waitUntil(
+        caches.keys().then(cacheNames => {
+            return Promise.all(
+                cacheNames.filter(cache => cache !== CACHE_NAME)
+                          .map(cache => caches.delete(cache))
+            );
+        })
+    );
+});
+
+// Intercept fetch requests (Offline fallback)
+self.addEventListener('fetch', event => {
+    // Abaikan request API POST (biarkan IndexDB yang menangani offline data entry)
+    if (event.request.method !== 'GET') return;
+
+    event.respondWith(
+        caches.match(event.request).then(cachedResponse => {
+            return cachedResponse || fetch(event.request);
+        }).catch(() => {
+            // Jika gagal ambil dari network dan tidak ada di cache, arahkan ke halaman utama
+            return caches.match('./index.html');
+        })
+    );
 });
