@@ -3,97 +3,556 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Real Count Pemenangan - Input Saksi</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- SweetAlert2 untuk Notifikasi Menarik -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- Manifest untuk fitur Install/PWA -->
-    <link rel="manifest" href="manifest.json">
+    <title>Kawal Suara Surabaya</title>
+    <!-- Mendaftarkan PWA / Web App Manifest (Opsional tapi disarankan untuk Offline) -->
+    <meta name="theme-color" content="#03754c">
+    
+    <style>
+        :root {
+            --primary: #03754c;
+            --accent: #FF9c08;
+            --highlight: #fff212;
+            --white: #fefefe;
+            --black: #000000;
+            --gray-bg: #f4f6f8;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 8px rgba(0,0,0,0.1);
+            --shadow-lg: 0 8px 16px rgba(0,0,0,0.15);
+            --radius: 12px;
+        }
+
+        /* RESET & BASE */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--gray-bg); color: var(--black); padding-bottom: 80px; }
+
+        /* HEADER & OFFLINE BANNER */
+        header {
+            background: linear-gradient(135deg, var(--primary), #025939);
+            color: var(--white); padding: 15px 20px;
+            box-shadow: var(--shadow-md); position: sticky; top: 0; z-index: 100;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .header-title { font-weight: bold; font-size: 1.2rem; }
+        .header-actions button {
+            background: var(--accent); color: var(--white); border: none; padding: 6px 12px;
+            border-radius: 6px; font-weight: bold; cursor: pointer; box-shadow: var(--shadow-sm);
+            transition: transform 0.1s, background 0.2s;
+        }
+        .header-actions button:active { transform: scale(0.95); }
+        
+        #network-banner {
+            background: var(--primary); color: var(--white); text-align: center;
+            padding: 8px; font-weight: bold; font-size: 0.9rem; transition: background 0.3s;
+        }
+        #network-banner.offline { background: var(--accent); color: var(--black); }
+
+        /* CARDS (Anti-Flat UI) */
+        .container { padding: 15px; max-width: 600px; margin: 0 auto; }
+        .card {
+            background: var(--white); border-radius: var(--radius); padding: 20px;
+            margin-bottom: 20px; box-shadow: var(--shadow-md); border-top: 4px solid var(--primary);
+        }
+        .card-title { font-size: 1.1rem; font-weight: bold; margin-bottom: 15px; color: var(--primary); border-bottom: 2px solid var(--gray-bg); padding-bottom: 10px;}
+
+        /* FORM INPUTS */
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; }
+        .form-control {
+            width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px;
+            font-size: 1rem; transition: border 0.3s, box-shadow 0.3s;
+        }
+        .form-control:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(3, 117, 76, 0.2); }
+        
+        /* GRID PARTAI (Numpad Ergonomics) */
+        .partai-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .partai-item { background: var(--gray-bg); padding: 10px; border-radius: 8px; border-left: 4px solid #ccc;}
+        .partai-item.wajib { border-left-color: var(--accent); background: #fffcf5; }
+        .partai-item label { font-size: 0.85rem; display: flex; justify-content: space-between; }
+        .badge-wajib { background: var(--accent); color: var(--white); font-size: 0.6rem; padding: 2px 6px; border-radius: 4px; }
+        .partai-input { 
+            width: 100%; padding: 8px; font-size: 1.2rem; font-weight: bold; text-align: center;
+            border: 1px solid #ccc; border-radius: 6px; margin-top: 5px;
+        }
+
+        /* CAMERA SLOTS */
+        .photo-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .photo-slot {
+            background: var(--gray-bg); border: 2px dashed #ccc; border-radius: var(--radius);
+            height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; position: relative; overflow: hidden;
+        }
+        .photo-slot img { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; display: none; }
+        .photo-slot.filled { border-style: solid; border-color: var(--primary); }
+        .photo-slot.filled img { display: block; }
+        .photo-slot span { font-weight: bold; color: #555; text-align: center; font-size: 0.9rem; z-index: 1;}
+
+        /* BUTTON SUBMIT */
+        .btn-submit {
+            background: var(--primary); color: var(--white); width: 100%; padding: 15px;
+            font-size: 1.2rem; font-weight: bold; border: none; border-radius: var(--radius);
+            cursor: pointer; box-shadow: var(--shadow-lg); transition: all 0.2s;
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+        }
+        .btn-submit:active { transform: scale(0.98); box-shadow: var(--shadow-sm); }
+        .btn-submit:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* IN-APP CAMERA MODAL (Full Screen) */
+        #camera-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: var(--black); z-index: 999; flex-direction: column;
+        }
+        #video-preview { width: 100%; height: 80vh; object-fit: cover; }
+        .camera-controls { height: 20vh; display: flex; justify-content: center; align-items: center; gap: 20px; background: #111; padding: 20px;}
+        .btn-capture {
+            width: 70px; height: 70px; border-radius: 50%; background: var(--highlight);
+            border: 5px solid var(--white); cursor: pointer;
+        }
+        .btn-capture:disabled { background: #555; border-color: #333; }
+        .btn-close-cam { background: none; border: none; color: var(--white); font-size: 1.2rem; cursor: pointer; padding: 10px; }
+        #gps-status { position: absolute; top: 20px; left: 20px; color: var(--highlight); font-weight: bold; text-shadow: 1px 1px 2px black; z-index: 1000;}
+
+        /* CUSTOM NOTIFICATION (Anti-Flat Modal) */
+        #custom-toast {
+            position: fixed; top: -100px; left: 50%; transform: translateX(-50%);
+            background: var(--white); color: var(--black); padding: 15px 25px;
+            border-radius: 30px; box-shadow: var(--shadow-lg); font-weight: bold;
+            transition: top 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55); z-index: 1000;
+            border: 2px solid var(--primary); display: flex; align-items: center; gap: 10px;
+        }
+        #custom-toast.show { top: 20px; }
+        #custom-toast.error { border-color: red; color: red; }
+    </style>
 </head>
 <body>
-    <header class="app-header">
-        <div class="header-title">
-            <h1>Form C1 Real Count</h1>
-            <span id="network-status" class="status-badge online">Online</span>
+
+    <div id="network-banner">Mengecek koneksi...</div>
+    
+    <header>
+        <div class="header-title">Kawal Suara 2026</div>
+        <div class="header-actions">
+            <button onclick="clearCacheAndRefresh()">Reset & Cache</button>
         </div>
-        <button id="btn-refresh" class="btn-icon">🔄 Refresh & Clear Cache</button>
     </header>
 
-    <main class="container">
-        <form id="form-c1" class="form-card">
-            
-            <!-- Section 1: Data Saksi & Lokasi -->
-            <section class="form-section">
-                <h2>Data Lokasi & Saksi</h2>
-                <div class="input-group">
-                    <label for="nik">NIK Saksi</label>
-                    <input type="number" id="nik" required placeholder="Masukkan NIK 16 digit">
+    <div class="container">
+        <!-- CARD 1: Data Identitas & Lokasi -->
+        <div class="card">
+            <div class="card-title">1. Identitas & Lokasi TPS</div>
+            <div class="form-group">
+                <label>NIK Saksi (16 Digit)</label>
+                <input type="number" id="nik" class="form-control" inputmode="numeric" placeholder="Contoh: 3578...">
+            </div>
+            <div class="form-group">
+                <label>Nama Lengkap</label>
+                <input type="text" id="nama" class="form-control" placeholder="Sesuai KTP">
+            </div>
+            <div class="form-group">
+                <label>No HP (WhatsApp)</label>
+                <input type="number" id="no_hp" class="form-control" inputmode="numeric">
+            </div>
+            <div class="partai-grid">
+                <div class="form-group">
+                    <label>Kecamatan</label>
+                    <input type="text" id="kecamatan" class="form-control" placeholder="Kecamatan">
                 </div>
-                <div class="input-group">
-                    <label for="kecamatan">Kecamatan</label>
-                    <select id="kecamatan" required>
-                        <option value="">Pilih Kecamatan...</option>
-                        <option value="TEGALSARI">Tegalsari</option>
-                        <!-- Tambahkan kecamatan lain sesuai data Anda -->
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label for="kelurahan">Kelurahan</label>
-                    <input type="text" id="kelurahan" required placeholder="Contoh: DR. SOETOMO">
-                </div>
-                <div class="input-group">
-                    <label for="tps">Nomor TPS</label>
-                    <input type="number" id="tps" required placeholder="Contoh: 001">
-                </div>
-                <div class="input-group">
-                    <label for="alamat">Alamat TPS</label>
-                    <textarea id="alamat" rows="2" placeholder="Contoh: Jl. Pandegiling No.1"></textarea>
-                </div>
-            </section>
-
-            <!-- Section 2: Input Suara -->
-            <section class="form-section">
-                <h2>Perolehan Suara Partai & Caleg</h2>
-                <p class="section-note">Wajib mengisi minimal data untuk PKB, PDIP, Golkar, dan Gerindra.</p>
-                
-                <div id="partai-container">
-                    <!-- Template Partai (Dihasilkan via JS agar ringkas) -->
-                </div>
-            </section>
-
-            <!-- Section 3: Upload C1 -->
-            <section class="form-section highlight-section">
-                <h2>Bukti Dokumen C1</h2>
-                <p class="section-note">Pilih atau ambil minimal 5 foto dokumen C1 secara bersamaan.</p>
-                <div class="input-group">
-                    <label for="file_c1" class="file-label">
-                        📸 Unggah Minimal 5 Foto C1
-                        <input type="file" id="file_c1" accept="image/*" multiple required>
-                    </label>
-                    <p id="file-name" class="file-name-display">Belum ada foto yang dipilih.</p>
-                </div>
-            </section>
-
-            <!-- Submit Action -->
-            <div class="action-group">
-                <button type="submit" id="btn-submit" class="btn-primary">Kirim Data TPS</button>
-                <div id="antrean-info" class="offline-warning hidden">
-                    ⚠️ Anda sedang offline. Data akan disimpan dan dikirim otomatis saat sinyal kembali.
+                <div class="form-group">
+                    <label>Kelurahan</label>
+                    <input type="text" id="kelurahan" class="form-control" placeholder="Kelurahan">
                 </div>
             </div>
-        </form>
-    </main>
+            <div class="partai-grid">
+                <div class="form-group">
+                    <label>Nomor TPS</label>
+                    <input type="number" id="tps" class="form-control" inputmode="numeric" placeholder="Misal: 01">
+                </div>
+                <div class="form-group">
+                    <label>Alamat (Singkat)</label>
+                    <input type="text" id="alamat" class="form-control" placeholder="Nama Jalan/Gedung">
+                </div>
+            </div>
+        </div>
 
-    <script src="app.js"></script>
-    <script>
-        // Mendaftarkan Service Worker untuk kapabilitas Offline
+        <!-- CARD 2: Input Suara 18 Partai -->
+        <div class="card">
+            <div class="card-title">2. Perolehan Suara Partai</div>
+            <p style="font-size: 0.85rem; margin-bottom:15px; color:#555;">* Wajib mengisi minimal 10 partai. Partai bertanda <span class="badge-wajib">WAJIB</span> tidak boleh dikosongi (isi 0 jika nol).</p>
+            
+            <div class="partai-grid" id="container-partai">
+                <!-- Di-generate via JavaScript -->
+            </div>
+        </div>
+
+        <!-- CARD 3: Kamera C1 -->
+        <div class="card">
+            <div class="card-title">3. Bukti Foto C1 (Parsial)</div>
+            <p style="font-size: 0.85rem; margin-bottom:15px; color:#555;">Foto langsung bagian kolom masing-masing partai. GPS & Waktu akan tertanam otomatis.</p>
+            <div class="photo-slots" id="container-foto">
+                <div class="photo-slot" onclick="openCamera('PKB')"><span>📸<br>C1 PKB</span><img id="img-PKB"></div>
+                <div class="photo-slot" onclick="openCamera('PDIP')"><span>📸<br>C1 PDIP</span><img id="img-PDIP"></div>
+                <div class="photo-slot" onclick="openCamera('Golkar')"><span>📸<br>C1 Golkar</span><img id="img-Golkar"></div>
+                <div class="photo-slot" onclick="openCamera('Gerindra')"><span>📸<br>C1 Gerindra</span><img id="img-Gerindra"></div>
+                <div class="photo-slot" onclick="openCamera('Lainnya')"><span>📸<br>C1 Partai Lain</span><img id="img-Lainnya"></div>
+            </div>
+        </div>
+
+        <button class="btn-submit" id="btn-submit" onclick="submitData()">KIRIM DATA KE SERVER</button>
+    </div>
+
+    <!-- UI Modal Kamera In-App -->
+    <div id="camera-modal">
+        <div id="gps-status">Mencari Sinyal GPS... 🛰️</div>
+        <video id="video-preview" autoplay playsinline></video>
+        <div class="camera-controls">
+            <button class="btn-close-cam" onclick="closeCamera()">Batal</button>
+            <button class="btn-capture" id="btn-capture" onclick="capturePhoto()" disabled></button>
+        </div>
+        <!-- Canvas tersembunyi untuk proses watermark dan kompresi -->
+        <canvas id="canvas-hidden" style="display:none;"></canvas>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="custom-toast"><span id="toast-icon"></span> <span id="toast-msg">Pesan</span></div>
+
+<script>
+    /**
+     * ==============================================================================
+     * ENGINE KAWAL SUARA SURABAYA (FRONTEND)
+     * ==============================================================================
+     */
+
+    // GANTI URL INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
+    const API_URL = "https://script.google.com/macros/s/AKfycbxSbe79gXWIYFXysaFWmdt8WNbcPYBvq0Ulf0clh6-XzKSKm60cncZp9q3mgse9Er8k/exec"; 
+
+    // Konfigurasi 18 Partai
+    const DAFTAR_PARTAI = [
+        { id: "PKB", nama: "1. PKB", wajib: true },
+        { id: "Gerindra", nama: "2. Gerindra", wajib: true },
+        { id: "PDIP", nama: "3. PDIP", wajib: true },
+        { id: "Golkar", nama: "4. Golkar", wajib: true },
+        { id: "Nasdem", nama: "5. Nasdem", wajib: false },
+        { id: "Buruh", nama: "6. Buruh", wajib: false },
+        { id: "Gelora", nama: "7. Gelora", wajib: false },
+        { id: "PKS", nama: "8. PKS", wajib: false },
+        { id: "PKN", nama: "9. PKN", wajib: false },
+        { id: "Hanura", nama: "10. Hanura", wajib: false },
+        { id: "Garuda", nama: "11. Garuda", wajib: false },
+        { id: "PAN", nama: "12. PAN", wajib: false },
+        { id: "PBB", nama: "13. PBB", wajib: false },
+        { id: "Demokrat", nama: "14. Demokrat", wajib: false },
+        { id: "PSI", nama: "15. PSI", wajib: false },
+        { id: "Perindo", nama: "16. Perindo", wajib: false },
+        { id: "PPP", nama: "17. PPP", wajib: false },
+        { id: "Ummat", nama: "18. Ummat", wajib: false }
+    ];
+
+    let currentCameraSlot = "";
+    let capturedPhotos = {}; // Menyimpan { PKB: "base64...", PDIP: ... }
+    let streamReference = null;
+    let currentGPS = { lat: null, lng: null };
+    let isOnline = navigator.onLine;
+
+    // 1. INISIALISASI UI & SERVICE WORKER
+    document.addEventListener("DOMContentLoaded", () => {
+        renderPartaiGrid();
+        updateNetworkStatus();
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+        initDatabase();
+
+        // Daftarkan Service Worker
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('Service Worker terdaftar!', reg.scope))
-                    .catch(err => console.error('Service Worker gagal:', err));
-            });
+            navigator.serviceWorker.register('./sw.js').then(() => console.log("Service Worker Active."));
         }
-    </script>
+    });
+
+    function renderPartaiGrid() {
+        const container = document.getElementById("container-partai");
+        let html = "";
+        DAFTAR_PARTAI.forEach(p => {
+            const wajibBadge = p.wajib ? `<span class="badge-wajib">WAJIB</span>` : "";
+            const classWajib = p.wajib ? "wajib" : "";
+            html += `
+                <div class="partai-item ${classWajib}">
+                    <label>${p.nama} ${wajibBadge}</label>
+                    <input type="number" id="suara_${p.id}" class="partai-input" inputmode="numeric">
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    // 2. NETWORK & BACKGROUND SYNC MANAGER
+    function updateNetworkStatus() {
+        isOnline = navigator.onLine;
+        const banner = document.getElementById("network-banner");
+        if (isOnline) {
+            banner.textContent = "🟢 ONLINE - Tersambung ke Server";
+            banner.className = "";
+            processOfflineQueue(); // Langsung proses antrian saat online
+        } else {
+            banner.textContent = "🟠 OFFLINE - Data akan disimpan di memori HP";
+            banner.className = "offline";
+        }
+    }
+
+    // 3. DATABASE LOKAL (INDEXED DB)
+    let db;
+    function initDatabase() {
+        const request = indexedDB.open("KawalSuaraDB", 1);
+        request.onupgradeneeded = (e) => {
+            db = e.target.result;
+            if (!db.objectStoreNames.contains("antrian")) {
+                db.createObjectStore("antrian", { keyPath: "id", autoIncrement: true });
+            }
+        };
+        request.onsuccess = (e) => { db = e.target.result; processOfflineQueue(); };
+    }
+
+    function saveToQueue(payload) {
+        return new Promise((resolve) => {
+            const tx = db.transaction("antrian", "readwrite");
+            tx.objectStore("antrian").add(payload);
+            tx.oncomplete = resolve;
+        });
+    }
+
+    async function processOfflineQueue() {
+        if (!isOnline || !db) return;
+        const tx = db.transaction("antrian", "readonly");
+        const store = tx.objectStore("antrian");
+        const request = store.getAll();
+        
+        request.onsuccess = async () => {
+            const antrian = request.result;
+            if (antrian.length > 0) showToast(`Mengirim ${antrian.length} data tertunda...`, false);
+            
+            for (const item of antrian) {
+                try {
+                    await sendToServer(item);
+                    // Hapus dari antrian jika sukses
+                    const delTx = db.transaction("antrian", "readwrite");
+                    delTx.objectStore("antrian").delete(item.id);
+                } catch (error) {
+                    console.error("Gagal sync data", item.id, error);
+                }
+            }
+        };
+    }
+
+    // 4. CAMERA & GEOTAGGING ENGINE
+    async function openCamera(slotName) {
+        currentCameraSlot = slotName;
+        document.getElementById("camera-modal").style.display = "flex";
+        
+        // Memaksa GPS menyala dan mencari koordinat
+        const gpsStatus = document.getElementById("gps-status");
+        const btnCapture = document.getElementById("btn-capture");
+        gpsStatus.textContent = "Mencari Sinyal GPS... 🛰️ (Pastikan GPS Aktif)";
+        
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                currentGPS = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                gpsStatus.textContent = `GPS Terkunci: ${currentGPS.lat.toFixed(4)}, ${currentGPS.lng.toFixed(4)} ✅`;
+                btnCapture.disabled = false; // Buka kunci shutter
+            },
+            (err) => {
+                gpsStatus.textContent = "❌ ERROR: GPS WAJIB DINYALAKAN UNTUK FOTO";
+                showToast("Nyalakan Izin Lokasi/GPS di Browser Anda!", true);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+
+        // Menyalakan Kamera Belakang (environment)
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+            const video = document.getElementById("video-preview");
+            video.srcObject = stream;
+            streamReference = stream;
+        } catch (err) {
+            showToast("Gagal mengakses kamera. Periksa izin kamera.", true);
+            closeCamera();
+        }
+    }
+
+    function closeCamera() {
+        document.getElementById("camera-modal").style.display = "none";
+        document.getElementById("btn-capture").disabled = true;
+        if (streamReference) {
+            streamReference.getTracks().forEach(track => track.stop());
+            streamReference = null;
+        }
+    }
+
+    function capturePhoto() {
+        const video = document.getElementById("video-preview");
+        const canvas = document.getElementById("canvas-hidden");
+        const ctx = canvas.getContext("2d");
+
+        // Set ukuran canvas sesuai resolusi video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        // Gambar frame dari video ke canvas
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // ==========================================
+        // APPLY WATERMARK & GEOTAGGING
+        // ==========================================
+        const nik = document.getElementById("nik").value || "NIK_KOSONG";
+        const tps = document.getElementById("tps").value || "TPS_KOSONG";
+        const timestamp = new Date().toLocaleString("id-ID");
+        
+        // Background hitam transparan untuk teks
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.fillRect(0, canvas.height - 120, canvas.width, 120);
+        
+        // Teks Watermark
+        ctx.fillStyle = "var(--highlight)";
+        ctx.font = "bold 24px Arial"; // Ukuran font bisa disesuaikan resolusi kamera
+        ctx.fillText(`Kawal Suara 2026 - Alat Bukti Sah`, 20, canvas.height - 90);
+        ctx.fillStyle = "var(--white)";
+        ctx.font = "20px Arial";
+        ctx.fillText(`NIK: ${nik} | TPS: ${tps}`, 20, canvas.height - 60);
+        ctx.fillText(`Waktu: ${timestamp}`, 20, canvas.height - 35);
+        ctx.fillText(`GPS: Lat ${currentGPS.lat}, Lng ${currentGPS.lng}`, 20, canvas.height - 10);
+
+        // Kompresi kualitas Medium (0.7) untuk menghemat bandwidth
+        const base64Image = canvas.toDataURL("image/jpeg", 0.7);
+        
+        // Simpan ke state dan render ke UI
+        capturedPhotos[currentCameraSlot] = base64Image;
+        const imgEl = document.getElementById(`img-${currentCameraSlot}`);
+        imgEl.src = base64Image;
+        imgEl.parentElement.classList.add("filled");
+        
+        closeCamera();
+        showToast(`Foto ${currentCameraSlot} berhasil direkam.`);
+    }
+
+    // 5. VALIDATOR & SUBMIT PROCESSOR
+    async function submitData() {
+        const btn = document.getElementById("btn-submit");
+        
+        // Anti-Accidental Click: Kunci tombol sementara
+        btn.disabled = true;
+        btn.innerHTML = "⏳ Memvalidasi...";
+
+        try {
+            // A. Ambil Data Identitas
+            const payload = {
+                saksi: {
+                    nik: document.getElementById("nik").value,
+                    nama: document.getElementById("nama").value,
+                    no_hp: document.getElementById("no_hp").value
+                },
+                lokasi: {
+                    kecamatan: document.getElementById("kecamatan").value,
+                    kelurahan: document.getElementById("kelurahan").value,
+                    tps: document.getElementById("tps").value,
+                    alamat: document.getElementById("alamat").value
+                },
+                suara: {},
+                foto: []
+            };
+
+            // B. Validasi Dasar
+            if (payload.saksi.nik.length !== 16) throw new Error("NIK wajib 16 digit.");
+            if (!payload.lokasi.kecamatan || !payload.lokasi.tps) throw new Error("Kecamatan dan TPS wajib diisi.");
+
+            // C. Mapping Suara & Validasi Aturan 10 Partai
+            let jumlahDiisi = 0;
+            DAFTAR_PARTAI.forEach(p => {
+                const val = document.getElementById(`suara_${p.id}`).value;
+                if (val !== "") {
+                    payload.suara[p.id] = parseInt(val);
+                    jumlahDiisi++;
+                }
+                
+                // Cek Partai Wajib (Tidak Boleh Null/Kosong)
+                if (p.wajib && val === "") {
+                    throw new Error(`Partai Wajib (${p.nama}) tidak boleh dikosongi. Isi angka 0 jika tidak ada suara.`);
+                }
+            });
+
+            if (jumlahDiisi < 10) throw new Error(`Minimal harus mengisi perolehan suara untuk 10 partai. (Baru diisi: ${jumlahDiisi})`);
+
+            // D. Mapping Foto & Validasi 5 Bukti
+            const requiredFotos = ['PKB', 'PDIP', 'Golkar', 'Gerindra', 'Lainnya'];
+            requiredFotos.forEach(slot => {
+                if (!capturedPhotos[slot]) throw new Error(`Foto C1 bagian ${slot} belum diambil.`);
+                payload.foto.push({ nama_partai: slot, base64: capturedPhotos[slot] });
+            });
+
+            // E. Proses Routing (Online vs Offline)
+            if (isOnline) {
+                btn.innerHTML = "🚀 Mengirim ke Server...";
+                await sendToServer(payload);
+                clearForm();
+                showToast("✅ Berhasil! Data sukses masuk ke server.");
+            } else {
+                await saveToQueue(payload);
+                clearForm();
+                showToast("🟠 OFFLINE: Data disimpan di HP. Akan dikirim otomatis saat online.");
+            }
+
+        } catch (error) {
+            showToast(error.message, true);
+        } finally {
+            // Kembalikan status tombol
+            btn.disabled = false;
+            btn.innerHTML = "KIRIM DATA KE SERVER";
+        }
+    }
+
+    async function sendToServer(payload) {
+        if(API_URL === "https://script.google.com/macros/s/AKfycbxSbe79gXWIYFXysaFWmdt8WNbcPYBvq0Ulf0clh6-XzKSKm60cncZp9q3mgse9Er8k/exec") {
+            throw new Error("Anda belum memasukkan API_URL dari Apps Script ke dalam kode HTML.");
+        }
+        
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            // Opsional: headers tidak perlu diset rumit untuk menghindari isu CORS ketat pada GAS
+        });
+        
+        const result = await response.json();
+        if (result.status !== "success") {
+            throw new Error("Server menolak: " + result.message);
+        }
+        return result;
+    }
+
+    // 6. UTILITIES (Anti-Flat Toast, Reset)
+    let toastTimeout;
+    function showToast(message, isError = false) {
+        const toast = document.getElementById("custom-toast");
+        document.getElementById("toast-msg").innerText = message;
+        document.getElementById("toast-icon").innerText = isError ? "⚠️" : "💡";
+        
+        if(isError) toast.classList.add("error");
+        else toast.classList.remove("error");
+
+        toast.classList.add("show");
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => { toast.classList.remove("show"); }, 4000);
+    }
+
+    function clearForm() {
+        document.querySelectorAll("input").forEach(input => input.value = "");
+        capturedPhotos = {};
+        document.querySelectorAll(".photo-slot").forEach(slot => slot.classList.remove("filled"));
+    }
+
+    function clearCacheAndRefresh() {
+        if(confirm("Yakin ingin menghapus memori Cache? Pastikan tidak ada data Pending.")) {
+            // Bersihkan antrian IndexedDB
+            const tx = db.transaction("antrian", "readwrite");
+            tx.objectStore("antrian").clear();
+            tx.oncomplete = () => {
+                window.location.reload(true);
+            };
+        }
+    }
+</script>
 </body>
 </html>
