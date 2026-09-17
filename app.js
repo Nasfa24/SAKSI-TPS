@@ -2,7 +2,7 @@
  * KONFIGURASI API
  * Ganti URL di bawah dengan Web App URL dari Google Apps Script yang sudah Anda Deploy!
  */
-const API_URL = "URL_WEB_APP_GOOGLE_SCRIPT_ANDA_DISINI"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbxSbe79gXWIYFXysaFWmdt8WNbcPYBvq0Ulf0clh6-XzKSKm60cncZp9q3mgse9Er8k/exec"; 
 
 const DB_NAME = "RealCountDB";
 const STORE_NAME = "antrean_c1";
